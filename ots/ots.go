@@ -5,10 +5,12 @@ import (
 	//"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,39 +34,36 @@ func help(cmd []string, c io.Writer) error {
 	return nil
 }
 
-var profile *os.File
 var profLock sync.Mutex
 
-func startCPUProfile(args []string, c io.Writer) error {
+func cpuProfile(args []string, c io.Writer) error {
 	profLock.Lock()
 	defer profLock.Unlock()
-	if nil != profile {
-		return fmt.Errorf("Previous cpu profile task is not stoped.")
+	sleepSecs := time.Duration(10)
+	if len(args) > 0 {
+		secs, serr := strconv.Atoi(args[0])
+		if nil != serr {
+			return serr
+		}
+		sleepSecs = time.Duration(secs)
 	}
 	var profileName string
-	if len(args) == 0 {
+	if len(args) < 2 {
 		profileName = fmt.Sprintf("./cpuprof.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
 	} else {
-		profileName = args[0]
+		profileName = args[1]
 	}
-	var err error
-	profile, err = os.Create(profileName)
+	profile, err := os.Create(profileName)
 	if err == nil {
 		err = pprof.StartCPUProfile(profile)
+		defer profile.Close()
+	}
+	if nil == err {
+		fmt.Fprintf(c, "Wait %d seconds to collect cpu profile info...\n", sleepSecs)
+		time.Sleep(sleepSecs * time.Second)
+		pprof.StopCPUProfile()
 	}
 	return err
-}
-
-func stopCPUProfile(cmd []string, c io.Writer) error {
-	profLock.Lock()
-	defer profLock.Unlock()
-	if nil == profile {
-		return fmt.Errorf("No running cpu profile task.")
-	}
-	pprof.StopCPUProfile()
-	profile.Close()
-	profile = nil
-	return nil
 }
 
 func stackDump(args []string, c io.Writer) error {
@@ -77,9 +76,48 @@ func stackDump(args []string, c io.Writer) error {
 	dumpfile, err := os.Create(dumpfileName)
 	if err == nil {
 		defer dumpfile.Close()
-		stackBuf := make([]byte, 1024*1024)
+		stackBuf := make([]byte, 1024*1024*64)
 		n := runtime.Stack(stackBuf, true)
-		_, err = dumpfile.Write(stackBuf[0:n])
+		err = ioutil.WriteFile(dumpfileName, stackBuf[0:n], 0660)
+	}
+	return err
+}
+
+func memprof(args []string, c io.Writer) error {
+	var dumpfileName string
+	if len(args) == 0 {
+		dumpfileName = fmt.Sprintf("./memprof.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
+	} else {
+		dumpfileName = args[0]
+	}
+	dumpfile, err := os.Create(dumpfileName)
+	if err == nil {
+		defer dumpfile.Close()
+		err = pprof.WriteHeapProfile(dumpfile)
+	}
+	return err
+}
+
+func blockProfile(args []string, c io.Writer) error {
+	secs, serr := strconv.Atoi(args[0])
+	if nil != serr {
+		return serr
+	}
+
+	var dumpfileName string
+	if len(args) == 1 {
+		dumpfileName = fmt.Sprintf("./blockprof.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
+	} else {
+		dumpfileName = args[1]
+	}
+	runtime.SetBlockProfileRate(1)
+	defer runtime.SetBlockProfileRate(0)
+	fmt.Fprintf(c, "Wait %d seconds to collect block profile info...\n", secs)
+	time.Sleep(time.Duration(secs) * time.Second)
+	dumpfile, err := os.Create(dumpfileName)
+	if err == nil {
+		defer dumpfile.Close()
+		err = pprof.Lookup("block").WriteTo(dumpfile, 1)
 	}
 	return err
 }
@@ -92,13 +130,13 @@ func stat(args []string, c io.Writer) error {
 	fmt.Fprintf(c, "NumCgoCall: %d\n", runtime.NumCgoCall())
 	fmt.Fprintf(c, "NumGoroutine: %d\n", runtime.NumGoroutine())
 	fmt.Fprintf(c, "GOMAXPROCS: %d\n", runtime.GOMAXPROCS(0))
-	// var memstat runtime.MemStats
-	// runtime.ReadMemStats(&memstat)
-	// b, err := json.MarshalIndent(memstat, " ", "    ")
-	// if nil == err {
-	// 	fmt.Fprintf(c, "MemStats:\n")
-	// 	c.Write(b)
-	// }
+	fmt.Fprintf(c, "GODEBUG: %s\n", os.Getenv("GODEBUG"))
+
+	var memstat runtime.MemStats
+	runtime.ReadMemStats(&memstat)
+	fmt.Fprintf(c, "HeapIdle: %d\n", memstat.HeapIdle)
+	fmt.Fprintf(c, "HeapInuse: %d\n", memstat.HeapInuse)
+	fmt.Fprintf(c, "HeapObjects: %d\n", memstat.HeapObjects)
 	return nil
 }
 
@@ -191,9 +229,10 @@ func RegisterHandler(cmd string, handler func([]string, io.Writer) error, minArg
 }
 
 func init() {
-	RegisterHandler("startCPUprofile", startCPUProfile, 0, 1, "StartCPUProfile  [File Path]       StartCPUProfile with given file path, default is ./cpu.prof.<time>.<pid>")
-	RegisterHandler("stopCPUProfile", stopCPUProfile, 0, 0, "StopCPUProfile                     StopCPUProfile")
+	RegisterHandler("CPUprofile", cpuProfile, 0, 2, "CPUProfile [Seconds] [File Path]   CPUProfile with given time & file path, default is 10 ./cpu.prof.<time>.<pid>")
 	RegisterHandler("stackDump", stackDump, 0, 1, "StackDump  [File Path]             Dump all goroutine statck trace, default is ./stackdump.<time>.<pid>")
+	RegisterHandler("MemProfile", memprof, 0, 1, "MemProfile [File Path]             Dump heap profile info, default is ./heaprof.<time>.<pid>")
+	RegisterHandler("blockProfile", blockProfile, 1, 2, "BlockProfile <Seconds> [File Path] Dump block profile info, default is ./blockprof.<time>.<pid>")
 	RegisterHandler("stat", stat, 0, 0, "Stat                               Print runtime stat")
 	RegisterHandler("gc", gc, 0, 0, "GC                                 Call GC")
 	RegisterHandler("exit", quit, 0, 0, "Exit                               exit current session")
