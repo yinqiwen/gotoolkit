@@ -2,6 +2,7 @@ package ots
 
 import (
 	"bytes"
+	"path/filepath"
 	//"encoding/json"
 	"fmt"
 	"io"
@@ -49,7 +50,7 @@ func cpuProfile(args []string, c io.Writer) error {
 	}
 	var profileName string
 	if len(args) < 2 {
-		profileName = fmt.Sprintf("./cpuprof.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
+		profileName = fmt.Sprintf("./%s.cpuprof.%s.%d", filepath.Base(os.Args[0]), time.Now().Format("20060102150405"), os.Getpid())
 	} else {
 		profileName = args[1]
 	}
@@ -69,7 +70,7 @@ func cpuProfile(args []string, c io.Writer) error {
 func stackDump(args []string, c io.Writer) error {
 	var dumpfileName string
 	if len(args) == 0 {
-		dumpfileName = fmt.Sprintf("./stackdump.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
+		dumpfileName = fmt.Sprintf("./%s.stackdump.%s.%d", filepath.Base(os.Args[0]), time.Now().Format("20060102150405"), os.Getpid())
 	} else {
 		dumpfileName = args[0]
 	}
@@ -86,7 +87,7 @@ func stackDump(args []string, c io.Writer) error {
 func memprof(args []string, c io.Writer) error {
 	var dumpfileName string
 	if len(args) == 0 {
-		dumpfileName = fmt.Sprintf("./memprof.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
+		dumpfileName = fmt.Sprintf("./%s.memprof.%s.%d", filepath.Base(os.Args[0]), time.Now().Format("20060102150405"), os.Getpid())
 	} else {
 		dumpfileName = args[0]
 	}
@@ -106,7 +107,7 @@ func blockProfile(args []string, c io.Writer) error {
 
 	var dumpfileName string
 	if len(args) == 1 {
-		dumpfileName = fmt.Sprintf("./blockprof.%s.%d", time.Now().Format("20060102150405"), os.Getpid())
+		dumpfileName = fmt.Sprintf("./%s.blockprof.%s.%d", filepath.Base(os.Args[0]), time.Now().Format("20060102150405"), os.Getpid())
 	} else {
 		dumpfileName = args[1]
 	}
@@ -149,6 +150,28 @@ func quit(args []string, c io.Writer) error {
 	return io.EOF
 }
 
+func Handle(line string, wr io.Writer) error {
+	cmd := strings.Fields(line)
+	if h, ok := commandHandlers[strings.ToLower(cmd[0])]; ok {
+		args := cmd[1:]
+		if (h.minArgs >= 0 && len(args) < h.minArgs) || (h.maxArgs >= 0 && len(args) > h.maxArgs) {
+			fmt.Fprintf(wr, "Invalid args in command:%s \r\n", line)
+			return nil
+		}
+		err := h.handler(args, wr)
+		if nil != err {
+			if err != io.EOF {
+				fmt.Fprintln(wr, err)
+			}
+			return err
+		}
+		fmt.Fprintf(wr, "Execute '%s' success.\n", line)
+	} else {
+		fmt.Fprintf(wr, "Error:unknown command:%s\r\n", cmd[0])
+	}
+	return nil
+}
+
 func ProcessTroubleShooting(rwc io.ReadWriteCloser) {
 	data := make([]byte, 0)
 	buf := make([]byte, 1024)
@@ -175,25 +198,10 @@ func ProcessTroubleShooting(rwc io.ReadWriteCloser) {
 		if len(line) == 0 {
 			continue
 		}
-		cmd := strings.Fields(line)
-		if h, ok := commandHandlers[strings.ToLower(cmd[0])]; ok {
-			args := cmd[1:]
-			if (h.minArgs >= 0 && len(args) < h.minArgs) || (h.maxArgs >= 0 && len(args) > h.maxArgs) {
-				fmt.Fprintf(rwc, "Invalid args in command:%s \r\n", line)
-				continue
-			}
-			err := h.handler(args, rwc)
-			if nil != err {
-				if err == io.EOF {
-					break
-				}
-				fmt.Fprintln(rwc, err)
-			} else {
-				fmt.Fprintf(rwc, "Execute '%s' success.\n", line)
-			}
-		} else {
-			fmt.Fprintf(rwc, "Error:unknown command:%s\r\n", cmd)
-			continue
+
+		err = Handle(line, rwc)
+		if err == io.EOF {
+			break
 		}
 	}
 	rwc.Close()
