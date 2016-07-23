@@ -6,7 +6,6 @@ import (
 	//"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"runtime"
@@ -68,19 +67,22 @@ func cpuProfile(args []string, c io.Writer) error {
 }
 
 func stackDump(args []string, c io.Writer) error {
-	var dumpfileName string
+
 	if len(args) == 0 {
-		dumpfileName = fmt.Sprintf("./%s.stackdump.%s.%d", filepath.Base(os.Args[0]), time.Now().Format("20060102150405"), os.Getpid())
+		//dumpfileName = fmt.Sprintf("./%s.stackdump.%s.%d", filepath.Base(os.Args[0]), time.Now().Format("20060102150405"), os.Getpid())
 	} else {
+		var dumpfileName string
 		dumpfileName = args[0]
-	}
-	dumpfile, err := os.Create(dumpfileName)
-	if err == nil {
+		dumpfile, err := os.Create(dumpfileName)
+		if nil != err {
+			return err
+		}
 		defer dumpfile.Close()
-		stackBuf := make([]byte, 1024*1024*64)
-		n := runtime.Stack(stackBuf, true)
-		err = ioutil.WriteFile(dumpfileName, stackBuf[0:n], 0660)
+		c = dumpfile
 	}
+	stackBuf := make([]byte, 1024*1024*64)
+	n := runtime.Stack(stackBuf, true)
+	_, err := c.Write(stackBuf[0:n])
 	return err
 }
 
