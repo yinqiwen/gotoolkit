@@ -7,8 +7,10 @@
     },
     "CP":[
         {
+            "indice":"news",
             "pattern":"iphone.myzaker.com",
-            "weight":3,
+            "CPWeight":3,
+            "ClassWeight":3,
             "class":"news"
         },
         {
@@ -254,7 +256,8 @@
         {
             "pattern":"shop.juanpi.com",
             "weight":4,
-            "class":"ecom"
+            "class":"ecom",
+            "indice":"ecom"
         },
         {
             "pattern":"maoyan.com",

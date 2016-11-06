@@ -16,11 +16,6 @@ import (
 	"time"
 )
 
-type indiceSetting struct {
-	indice  string
-	mapping string
-}
-
 type DataSourceSetting struct {
 	Pattern string
 	Indice  string
@@ -43,7 +38,7 @@ type ESConfig struct {
 }
 
 func main() {
-	file := flag.String("file", "", "Specify input file")
+	file := flag.String("file", "./test.json", "Specify input file")
 	cfile := flag.String("config", "config.json", "Specify config file")
 	es := flag.String("es", "http://127.0.0.1:9200", "Specify elastic search address")
 	count := flag.Int64("count", -1, "Specify total process count.")
@@ -62,13 +57,12 @@ func main() {
 	}
 
 	for indice, props := range cfg.Indice.Mapping {
-		dest := *es + "/" + indice + "/_mapping"
 		propsMapping := make(map[string]interface{})
 		for _, prop := range props {
 			propMap := make(map[string]string)
 			propMap["type"] = "string"
-			propMap["analyzer"] = "ik_max_word"
-			propMap["search_analyzer"] = "ik_max_word"
+			propMap["analyzer"] = "ik_syno"
+			propMap["search_analyzer"] = "ik_syno"
 			propMap["include_in_all"] = "true"
 			propsMapping[prop] = propMap
 		}
@@ -78,11 +72,51 @@ func main() {
 		all["enabled"] = false
 		app["_all"] = all
 
-		esMapping := make(map[string]interface{})
-		esMapping["mappings"] = app
-		b, _ := json.Marshal(esMapping)
-		http.Post(dest, "application/json", bytes.NewBuffer(b))
-		log.Printf("###Update mapping for %v", indice)
+		// esMapping := make(map[string]interface{})
+		// esMapping["mappings"] = app
+		esIndex := make(map[string]interface{})
+		esAnalyzer := make(map[string]interface{})
+		my_synonym := make(map[string]interface{})
+		my_synonym["type"] = "synonym"
+		my_synonym["synonyms_path"] = "analysis/synonym.txt"
+		es_filter := make(map[string]interface{})
+		es_filter["my_synonym"] = my_synonym
+		ik_syno := make(map[string]interface{})
+		//ik_syno["type"] = "custom"
+		ik_syno["tokenizer"] = "ik_max_word"
+		ik_syno["filter"] = []string{"my_synonym"}
+		esAnalyzer["ik_syno"] = ik_syno
+		esIndex["filter"] = es_filter
+		esIndex["analyzer"] = esAnalyzer
+		tmp := make(map[string]interface{})
+		tmp["analysis"] = esIndex
+		settting := make(map[string]interface{})
+		settting["index"] = tmp
+		b, _ := json.Marshal(settting)
+		dest := *es + "/" + indice
+
+		req, _ := http.NewRequest("PUT", dest, bytes.NewBuffer(b))
+		res, err := http.DefaultClient.Do(req)
+		if nil != err {
+			log.Printf("###Failed to create index with errror:%v", err)
+			return
+		} else {
+			resb, _ := ioutil.ReadAll(res.Body)
+			log.Printf("###Update index for %v with %s  %s", indice, string(b), string(resb))
+			res.Body.Close()
+		}
+		dest = *es + "/" + indice + "/app/_mapping"
+		b, _ = json.Marshal(app)
+		req, _ = http.NewRequest("POST", dest, bytes.NewBuffer(b))
+		res, err = http.DefaultClient.Do(req)
+		if nil != err {
+			log.Printf("###Failed to update mapping with errror:%v", err)
+			return
+		} else {
+			resb, _ := ioutil.ReadAll(res.Body)
+			log.Printf("###Update mapping for %v with %s  %s", indice, string(b), string(resb))
+			res.Body.Close()
+		}
 	}
 
 	// 	settings := make(map[string]indiceSetting)
@@ -284,7 +318,7 @@ func main() {
 				log.Printf("Failed to es:%v", err1)
 				return
 			}
-			//log.Printf("###res:%v", res)
+			log.Printf("###res:%v", indice)
 			if nil != res.Body {
 				io.Copy(ioutil.Discard, res.Body)
 				res.Body.Close()
