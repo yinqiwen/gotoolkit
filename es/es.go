@@ -134,6 +134,9 @@ func main() {
 		c2 := make(map[string]interface{})
 		c2["type"] = "keyword"
 		propsMapping["c2"] = c2
+		date := make(map[string]interface{})
+		date["type"] = "date"
+		propsMapping["date"] = date
 		app := make(map[string]interface{})
 		app["properties"] = propsMapping
 		all := make(map[string]interface{})
