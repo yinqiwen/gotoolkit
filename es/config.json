@@ -1,269 +1,452 @@
 {
     "Indice":{
+        "Name": ["news", "ent", "knowledge", "forum", "other"],
+        "Shards": 10
+    },
+    "Type":{
         "mapping":{
             "news":["title", "content", "desc"],
-            "ecom":["title", "content", "desc"]
+            "ecom":["title", "category", "desc", "seller"],
+            "multimedia":["title", "author", "desc", "tag"],
+            "book":["title", "author", "desc", "category", "tag"],
+            "knowledge":["title","content","desc","tag", "category", "answer_content", "best_answer_content", "author_desc"],
+            "movie":["title","info","desc","duanping", "ques_answer", "yingping", "tag"],
+            "consult":["title","job","desc"]
         }
     },
     "CP":[
         {
             "indice":"news",
+            "type":"news",
             "pattern":"iphone.myzaker.com",
-            "CPWeight":3,
-            "ClassWeight":3,
-            "class":"news"
+            "cw1":3,
+            "c1":"news",
+            "c2":"article"
         },
         {
+            "indice":"news",
+            "type":"news",
             "pattern":"3g.163.com",
-            "weight":3,
-            "class":"news"
+            "cw1":3,
+            "c1":"news",
+            "c2":"article"
         },
         {
+            "indice":"news",
+            "type":"news",
             "pattern":"i.ifeng.com",
-            "weight":3,
-            "class":"news"
+            "cw1":3,
+            "c1":"news",
+            "c2":"article"
         },
         {
+            "indice":"news",
+            "type":"multimedia",
             "pattern":"v.ifeng.com",
-            "weight":3,
-            "class":"news"
+            "cw1":3,
+            "c1":"news",
+            "c2":"video"
         },
         {
+            "indice":"news",
+            "type":"news",
             "pattern":"toutiao.com",
-            "weight":3,
-            "class":"news"
+            "cw1":3,
+            "c1":"news",
+            "c2":"article"
         },
         {
+            "indice":"ent",
+            "type":"multimedia",
             "pattern":"www.ximalaya.com",
-            "weight":1,
-            "class":"fm"
+            "cw1":1,
+            "c1":"fm",
+            "c2":"audio"
         },
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"www.autohome.com.cn",
-            "weight":3,
-            "class":"car"
+            "cw1":5,
+            "c1":"car",
+            "c2":"info"
         },
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"shuoke.autohome.com.cn",
-            "weight":3,
-            "class":"car"
+            "cw1":3,
+            "c1":"car",
+            "c2":"article"
         },
         {
+            "indice":"forum",
+            "type":"multimedia",
             "pattern":"v.autohome.com.cn",
-            "weight":4,
-            "class":"car"
+            "cw1":4,
+            "c1":"car",
+            "c2":"video"
         },
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"h5.ycapp.yiche.com/share/news",
-            "weight":5,
-            "class":"car"
+            "cw1":5,
+            "c1":"car",
+            "c2":"info"
         },
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"h5.ycapp.yiche.com/share/cheyou",
-            "weight":4,
-            "class":"car"
+            "cw1":3,
+            "c1":"car",
+            "c2":"article"
         },
         {
+            "indice":"forum",
+            "type":"multimedia",
             "pattern":"h5.ycapp.yiche.com/share/medianews",
-            "weight":4,
-            "class":"car"
+            "cw1":4,
+            "c1":"car",
+            "c2":"video"
         },
         {
+            "indice":"knowledge",
+            "type":"news",
             "pattern":"www.mafengwo.cn/i",
-            "weight":5,
-            "class":"travel"
+            "cw1":5,
+            "c1":"travel",
+            "c2":"article"
         },
         {
+            "indice":"knowledge",
+            "type":"news",
             "pattern":"m.ctrip.com",
             "weight":5,
-            "class":"travel"
+            "class":"travel",
+            "c2":"article"
         },
         {
+            "indice":"knowledge",
+            "type":"news",
             "pattern":"www.haodf.com",
-            "weight":5,
-            "class":"health"
+            "cw1":5,
+            "c1":"health",
+            "c2":"article"
         },
         {
+            "indice":"knowledge",
+            "type":"news",
             "pattern":"dxy.com/column",
-            "weight":5,
-            "class":"health"
+            "cw1":5,
+            "c1":"health",
+            "c2":"article"
         },
         {
+            "indice":"knowledge",
+            "type":"news",
             "pattern":"www.chunyuyisheng.com/articles",
-            "weight":5,
-            "class":"health"
+            "cw1":5,
+            "c1":"health",
+            "c2":"article"
         },
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"book.easou.com/w/novel",
-            "weight":5,
-            "class":"novel"
+            "cw1":5,
+            "c1":"novel",
+            "c2":"product"
         },
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"www.qidian.com/Book",
-            "weight":5,
-            "class":"novel"
+            "cw1":5,
+            "c1":"novel",
+            "c2":"product"
         },
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"www.tadu.com/book",
-            "weight":5,
-            "class":"novel"
+            "cw1":5,
+            "c1":"novel",
+            "c2":"product"
         },   
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"yuedu.baidu.com/ebook",
-            "weight":5,
-            "class":"novel"
+            "cw1":5,
+            "c1":"novel",
+            "c2":"product"
         },   
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"www.duokan.com/book",
-            "weight":5,
-            "class":"novel"
+            "cw1":5,
+            "c1":"novel",
+            "c2":"product"
         }, 
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"manhua.163.com/source",
-            "weight":5,
-            "class":"comic"
+            "cw1":5,
+            "c1":"comic",
+            "c2":"product"
         }, 
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"ac.qq.com/Comic/comicInfo",
-            "weight":5,
-            "class":"comic"
+            "cw1":5,
+            "c1":"comic",
+            "c2":"product"
         },  
         {
+            "indice":"ent",
+            "type":"book",
             "pattern":"u17.com",
-            "weight":5,
-            "class":"comic"
+            "cw1":5,
+            "c1":"comic",
+            "c2":"product"
         },    
         {
+            "indice":"knowledge",
+            "type":"knowledge",
             "pattern":"baobao.baidu.com",
-            "weight":4,
-            "class":"baby"
+            "cw1":4,
+            "c1":"baby",
+            "c2":"article"
         },   
         {
+            "indice":"knowledge",
+            "type":"knowledge",
             "pattern":"m.babytree.com",
-            "weight":5,
-            "class":"baby"
+            "cw1":5,
+            "c1":"baby",
+            "c2":"article"
         },
         {
+            "indice":"knowledge",
+            "type":"knowledge",
             "pattern":"xiachufang.com",
-            "weight":5,
-            "class":"menu"
+            "cw1":5,
+            "c1":"menu",
+            "c2":"article"
         }, 
         {
+            "indice":"knowledge",
+            "type":"knowledge",
             "pattern":"www.xiangha.com",
-            "weight":5,
-            "class":"menu"
+            "cw1":5,
+            "c1":"menu",
+            "c2":"article"
         },  
         {
+            "indice":"ent",
+            "type":"movie",
             "pattern":"movie.douban.com",
-            "weight":5,
-            "class":"movie"
+            "cw1":5,
+            "c1":"movie",
+            "c2":"product"
         }, 
         {
+            "indice":"ent",
+            "type":"multimedia",
             "pattern":"www.bilibili.com",
-            "weight":4,
-            "class":"video"
+            "cw1":4,
+            "c1":"video",
+            "c2":"video"
         }, 
         {
+            "indice":"ent",
+            "type":"multimedia",
             "pattern":"www.app-echo.com",
-            "weight":5,
-            "class":"music"
+            "cw1":5,
+            "c1":"music",
+            "c2":"song"
         },
         {
+            "indice":"ent",
+            "type":"multimedia",
             "pattern":"www.kuwo.cn",
-            "weight":5,
-            "class":"music"
+            "cw1":5,
+            "c1":"music",
+            "c2":"song"
         },
         {
+            "indice":"ent",
+            "type":"multimedia",
             "pattern":"v.yinyuetai.com",
-            "weight":5,
-            "class":"music"
+            "cw1":5,
+            "c1":"music",
+            "c2":"mv"
         },
         {
-            "pattern":"www.xiami.com",
-            "weight":5,
-            "class":"music"
+            "indice":"ent",
+            "type":"multimedia",
+            "pattern":"www.xiami.com/album",
+            "cw1":5,
+            "c1":"music",
+            "c2":"album"
         },   
         {
+            "indice":"ent",
+            "type":"multimedia",
+            "pattern":"www.xiami.com/song",
+            "cw1":5,
+            "c1":"music",
+            "c2":"song"
+        }, 
+        {
+            "indice":"ent",
+            "type":"multimedia",
+            "pattern":"www.xiami.com/mv",
+            "cw1":5,
+            "c1":"music",
+            "c2":"mv"
+        }, 
+        {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"item.m.jd.com",
-            "weight":4,
-            "class":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         },
         {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"unszacs.m.taobao.com",
-            "weight":4,
-            "class":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         }, 
         {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"shop.mogujie.com",
-            "weight":4,
-            "class":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         },
         {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"product.suning.com",
-            "weight":4,
-            "class":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         },
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"xueqiu.com",
-            "weight":5,
-            "class":"finance"
+            "cw1":5,
+            "c1":"finance",
+            "c2":"article"
         }, 
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"news.futunn.com",
-            "weight":4,
-            "class":"finance"
+            "cw1":4,
+            "c1":"finance",
+            "c2":"article"
         },
         {
+            "indice":"forum",
+            "type":"consult",
             "pattern":"www.zaih.com",
-            "weight":5,
-            "class":"consult"
+            "cw1":5,
+            "c1":"consult",
+            "c2":"article"
         },
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"bbs.ngacn.cc",
-            "weight":3,
-            "class":"game"
+            "cw1":3,
+            "c1":"game",
+            "c2":"article"
         }, 
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"bbs.nga.cn",
-            "weight":3,
-            "class":"game"
+            "cw1":3,
+            "c1":"game",
+            "c2":"article"
         }, 
         {
+            "indice":"forum",
+            "type":"news",
             "pattern":"v.17173.com",
-            "weight":4,
-            "class":"game"
+            "cw1":3,
+            "c1":"game",
+            "c2":"article"
         },     
         {
+            "indice":"knowledge",
+            "type":"knowledge",
             "pattern":"www.guokr.com",
-            "weight":5,
-            "class":"article"
+            "cw1":5,
+            "c1":"knowledge",
+            "c2":"article"
         },   
         {
+            "indice":"knowledge",
+            "type":"multimedia",
             "pattern":"m.open.163.com",
-            "weight":5,
-            "class":"edu"
+            "cw1":5,
+            "c1":"edu",
+            "c2":"video"
         },  
         {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"h5.m.taobao.com",
-            "weight":4,
-            "class":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         },
         {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"2.taobao.com",
-            "weight":4,
-            "class":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         }, 
         {
+            "indice":"ent",
+            "type":"ecom",
             "pattern":"shop.juanpi.com",
-            "weight":4,
-            "class":"ecom",
-            "indice":"ecom"
+            "cw1":4,
+            "c1":"ecom",
+            "c2":"product"
         },
         {
+            "indice":"ent",
+            "type":"movie",
             "pattern":"maoyan.com",
-            "weight":5,
-            "class":"movie"
-        }                                                                                                                                                                  
+            "cw1":5,
+            "c1":"movie",
+            "c2":"product"
+        },
+        {
+            "indice":"knowledge",
+            "type":"news",
+            "pattern":"www.tuniu.com",
+            "cw1":5,
+            "c1":"travel",
+            "c2":"article"
+        }                                                                                                                                                                   
     ]
 }
 

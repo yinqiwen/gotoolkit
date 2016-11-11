@@ -1,0 +1,22 @@
+{
+    "Indice":{
+        "Name": ["survey"],
+        "Shards": 10
+    },
+    "Type":{
+        "mapping":{
+            "survey":["title", "content", "abstract", "appNameList"]
+        }
+    },
+    "CP":[
+        {
+            "indice":"survey",
+            "type":"survey",
+            "pattern":"qzs.qq.com",
+            "cw1":3,
+            "c1":"survey",
+            "c2":"article"
+        }                                                                                                                                                                 
+    ]
+}
+
