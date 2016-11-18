@@ -91,7 +91,6 @@ func postData(line string) (bool, error) {
 			if len(cp.CP) > 0 {
 				doc["cp"] = cp.CP
 			}
-			doc["cw1"] = 1
 			doc["c1"] = cp.C1
 			doc["c2"] = cp.C2
 			break
@@ -135,7 +134,7 @@ func main() {
 	cfile := flag.String("config", "config.json", "Specify config file")
 	count := flag.Int64("count", -1, "Specify total process count.")
 	concurrent := flag.Int("concurrent", 1, "Specify max concurrent worker.")
-	replica := flag.Int("replica", 0, "Specify replica count.")
+	replica := flag.Int("replica", 1, "Specify replica count.")
 	flag.Parse()
 
 	tr := &http.Transport{
@@ -354,7 +353,7 @@ func main() {
 				res.Body.Close()
 			}
 			dest = gcfg.ES[0] + "/" + indice + "/_forcemerge?max_num_segments=5"
-			req, _ = http.NewRequest("PUT", dest, nil)
+			req, _ = http.NewRequest("POST", dest, nil)
 			res, err = http.DefaultClient.Do(req)
 			if nil != err {
 				log.Printf("###Failed to enable index replica with errror:%v", err)
