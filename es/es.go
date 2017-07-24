@@ -13,28 +13,37 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/yinqiwen/gotoolkit/iotools"
+	"github.com/yinqiwen/gotoolkit/xjson"
 )
+
+type extensionValues map[string]string
+
+func (i *extensionValues) String() string {
+	return "my string representation"
+}
+
+func (i *extensionValues) Set(value string) error {
+	ss := strings.SplitN(value, "=", 2)
+	if len(ss) != 2 {
+		return fmt.Errorf("Invalid format for %s %d", value, len(ss))
+	}
+	(*i)[ss[0]] = ss[1]
+	return nil
+}
 
 type DataSourceSetting struct {
 	Pattern string
-	Indice  string
-	Type    string
 	CP      string
 	C1      string //class1
 	C2      string //class2
-}
-
-type IndiceSetting struct {
-	Name   []string
-	Shards int
-}
-
-type TypeSetting struct {
-	Mapping map[string][]string
 }
 
 func getMD5Hash(text string) string {
@@ -44,11 +53,17 @@ func getMD5Hash(text string) string {
 }
 
 type ESConfig struct {
-	ES          []string
-	SynonymPath string
-	Indice      IndiceSetting
-	Type        TypeSetting
-	CP          []DataSourceSetting
+	ES            []string
+	CP            []DataSourceSetting
+	Indice        string
+	Type          string
+	Ext           extensionValues
+	Touch         string
+	FLock         string
+	DefaultField  map[string]interface{}
+	Rebuild       bool
+	rebuildIndice []string
+	realIndice    []string
 }
 
 var gcfg ESConfig
@@ -57,91 +72,217 @@ var processCount int64
 var limitCount int64
 var concurrentCount int32
 var maxConcurrent int32
+var invalidDateDocCount int32
+
+var errLogCount int64
 
 var esClient = &http.Client{}
 
-func postData(line string) (bool, error) {
+func deleteIfNotInt(doc map[string]interface{}, field string) {
+	v, exist := doc[field]
+	if exist {
+		nu, ok := v.(json.Number)
+		if ok {
+			_, err := nu.Int64()
+			ok = nil == err
+		} else {
+			ns := v.(string)
+			iv, err := strconv.Atoi(ns)
+			ok = nil == err
+			if ok {
+				delete(doc, field)
+				doc[field] = iv
+			}
+		}
+		if !ok {
+			if atomic.AddInt64(&errLogCount, 1)%1000 == 1 {
+				log.Printf("[WARN]Invalid field:%v with wrong type value:%v for doc:%v", field, doc[field], doc["id"])
+			}
+			delete(doc, field)
+		}
+	}
+}
+
+func postData(line string) error {
 	doc := make(map[string]interface{})
-	err := json.Unmarshal([]byte(line), &doc)
+	d := json.NewDecoder(strings.NewReader(line))
+	d.UseNumber()
+	err := d.Decode(&doc)
 	if nil != err {
 		log.Printf("Failed to unmarshal json:%s to config for reason:%v", line, err)
-		return false, err
+		return err
 	}
 	idstr := ""
+	_, deleteDoc := doc["delete"]
+
 	url, urlexist := doc["url"]
-	if !urlexist {
-		return false, fmt.Errorf("No 'url' in line:%v", line)
+	if !urlexist && !deleteDoc {
+		return fmt.Errorf("No 'url' in line:%v", line)
 	}
 	urlstr := url.(string)
 	id, exist := doc["id"]
 	if !exist {
+		if deleteDoc {
+			return nil
+		}
 		idstr = getMD5Hash(urlstr)
 	} else {
 		idstr = id.(string)
 	}
 
-	var cp DataSourceSetting
-	for _, v := range gcfg.CP {
-		if strings.Contains(urlstr, v.Pattern) || v.Pattern == "*" {
-			cp = v
-			if doc["content"] == "" && cp.Type == "news" && cp.C2 == "article" {
-				cp.Type = "multimedia"
-				cp.C2 = "video"
-			}
-			if len(cp.CP) > 0 {
-				doc["cp"] = cp.CP
-			}
-			doc["c1"] = cp.C1
-			doc["c2"] = cp.C2
-			break
+	if !deleteDoc {
+		_, exist = doc["title"]
+		if !exist {
+			return fmt.Errorf("No 'title' in line:%v", line)
+			//return false, nil
 		}
-	}
-	if cp.Indice == "" {
-		return false, fmt.Errorf("No match type found for:%v", doc["url"])
-	}
-	delete(doc, "id")
-	if date, exist := doc["date"]; exist {
-		if date == "0000-00-00 00:00:00" {
-			delete(doc, "date")
+		existCp := ""
+		if tmp, cpExist := doc["cp"]; cpExist {
+			existCp = tmp.(string)
 		}
-	}
-	b, _ := json.Marshal(doc)
-	dest := gcfg.ES[int(processCount)%len(gcfg.ES)] + "/" + cp.Indice + "/" + cp.Type + "/" + idstr
+		var cp DataSourceSetting
+		//cpMatch := false
+		if len(existCp) == 0 {
+			for _, v := range gcfg.CP {
+				if strings.Contains(urlstr, v.Pattern) || v.Pattern == "*" {
+					cp = v
+					doc["cp"] = cp.CP
+					if _, eleExist := doc["c1"]; !eleExist {
+						if len(cp.C1) > 0 {
+							doc["c1"] = cp.C1
+						}
+					}
+					if _, eleExist := doc["c2"]; !eleExist {
+						if len(cp.C2) > 0 {
+							doc["c2"] = cp.C2
+						}
+					}
+					//cpMatch = true
+					break
+				}
+			}
+		}
 
-	res, err1 := esClient.Post(dest, "application/json", bytes.NewBuffer(b))
-	if nil != err1 {
-		return false, err1
-	}
-	if res.StatusCode >= 300 {
-		resb, _ := ioutil.ReadAll(res.Body)
-		res.Body.Close()
-		log.Printf("##Recv error %d:%s", res.StatusCode, string(resb))
-	} else {
-		if nil != res.Body {
-			io.Copy(ioutil.Discard, res.Body)
-			res.Body.Close()
+		// if !cpMatch && len(existCp) == 0 {
+		// 	doc["cp"] = "unknown"
+		// 	doc["c1"] = "unknown"
+		// 	doc["c2"] = "unknown"
+		// 	log.Printf("[WARN]Unmatched pattern for line with id:%v & url:%v", idstr, doc["url"])
+		// 	//return fmt.Errorf("No match pattern found for:%v", doc["url"])
+		// }
+		for k, v := range gcfg.Ext {
+			doc[k] = v
+		}
+
+		if len(gcfg.DefaultField) > 0 {
+			for k, v := range gcfg.DefaultField {
+				if _, exist := doc[k]; !exist {
+					doc[k] = v
+				}
+			}
+		}
+		delete(doc, "id")
+		if date, exist := doc["date"]; exist {
+			if date == "0000-00-00 00:00:00" {
+				delete(doc, "date")
+			} else {
+				_, dateErr := time.Parse("2006-01-02 15:04:05", date.(string))
+				if nil != dateErr {
+					atomic.AddInt32(&invalidDateDocCount, 1)
+					log.Printf("Invalid 'date:%v' for doc:%v with url %v", date, idstr, doc["url"])
+					delete(doc, "date")
+				}
+			}
 		}
 	}
+
+	for i, esAddr := range gcfg.ES {
+		var httpReq *http.Request
+		var dest string
+		if len(gcfg.rebuildIndice) > 0 {
+			dest = esAddr + "/" + gcfg.rebuildIndice[i] + "/" + gcfg.Type + "/" + idstr + "?timeout=1m"
+		} else {
+			dest = esAddr + "/" + gcfg.Indice + "/" + gcfg.Type + "/" + idstr + "?timeout=1m"
+		}
+
+		if deleteDoc {
+			delete(doc, "delete")
+			dest = esAddr + "/" + gcfg.Indice + "/" + gcfg.Type + "/" + idstr
+			httpReq, err = http.NewRequest("DELETE", dest, nil)
+			if err != nil {
+				return err
+			}
+		} else {
+			b, _ := json.Marshal(doc)
+			httpReq, err = http.NewRequest("POST", dest, bytes.NewBuffer(b))
+			if err != nil {
+				return err
+			}
+			httpReq.Header.Set("Content-Type", "application/json")
+		}
+
+		res, err1 := esClient.Do(httpReq)
+		//res, err1 := esClient.Post(dest, "application/json", bytes.NewBuffer(b))
+		if nil != err1 {
+			return err1
+		}
+		if res.StatusCode >= 500 {
+			resb, _ := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			log.Printf("##Recv error %d:%s for line:%s", res.StatusCode, string(resb), line)
+		} else {
+			if nil != res.Body {
+				io.Copy(ioutil.Discard, res.Body)
+				res.Body.Close()
+			}
+		}
+	}
+
 	atomic.AddInt64(&processCount, 1)
-	if processCount%10000 == 0 {
+	if processCount%1000 == 0 {
 		log.Printf("#####Cost %v to put %d records", time.Now().Sub(startTime), processCount)
 	}
-	return false, nil
+	return nil
+}
+
+func getHttpBody(res *http.Response) string {
+	if nil != res.Body {
+		b, _ := ioutil.ReadAll(res.Body)
+		return string(b)
+	}
+	return ""
 }
 
 func main() {
-	file := flag.String("file", "./test.json", "Specify input file")
+	gcfg.Ext = make(map[string]string)
+
+	file := flag.String("file", "", "Specify input file")
+	format := flag.String("fformat", "", "Specify input file regex format")
 	cfile := flag.String("config", "config.json", "Specify config file")
 	count := flag.Int64("count", -1, "Specify total process count.")
 	concurrent := flag.Int("concurrent", 1, "Specify max concurrent worker.")
-	replica := flag.Int("replica", 1, "Specify replica count.")
+	bak := flag.String("backup", "./bakup", "Specify bacup dir")
+	inputDir := flag.String("dir", "./", "Specify bacup dir")
+	flag.Var(&gcfg.Ext, "X", "Some description for this param.")
+
 	flag.Parse()
 
-	tr := &http.Transport{
-		MaxIdleConnsPerHost: 2 * int(*concurrent),
+	getHttpErr := func(res *http.Response, err error) error {
+		if nil != err {
+			return err
+		}
+		if res.StatusCode != 200 {
+			resb, _ := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			return fmt.Errorf("%s", string(resb))
+		}
+		return nil
 	}
-	esClient.Transport = tr
-	limitCount = *count
+
+	if len(*bak) > 0 {
+		os.Mkdir(*bak, os.ModePerm)
+	}
+
 	b, err := ioutil.ReadFile(*cfile)
 	if nil != err {
 		log.Printf("Failed to load config file:%s for reason:%v", *cfile, err)
@@ -152,219 +293,229 @@ func main() {
 		log.Printf("Failed to parse config for reason:%v", err)
 		return
 	}
-	typeIndices := make(map[string][]string)
-	for _, cp := range gcfg.CP {
-		indices := typeIndices[cp.Type]
-		found := false
-		for _, k := range indices {
-			if k == cp.Indice {
-				found = true
-				break
+
+	inputFiles := *file
+	var fileNames []string
+	if len(inputFiles) == 0 {
+		iotools.InitLogger([]string{gcfg.Indice + ".log"})
+		files, _ := ioutil.ReadDir(*inputDir)
+		for _, f := range files {
+			if !f.IsDir() && !strings.HasSuffix(f.Name(), ".cksm") && !strings.HasSuffix(f.Name(), ".done") {
+				match, err := regexp.MatchString(*format, f.Name())
+				if nil == err && match {
+					fileNames = append(fileNames, f.Name())
+				}
 			}
 		}
-		if !found {
-			indices = append(indices, cp.Indice)
-			typeIndices[cp.Type] = indices
-		}
+	} else {
+		iotools.InitLogger([]string{"stdout", gcfg.Indice + ".log"})
+		fileNames = strings.Split(inputFiles, ",")
 	}
 
-	for _, indice := range gcfg.Indice.Name {
-		esIndex := make(map[string]interface{})
-		esAnalyzer := make(map[string]interface{})
-		mySynonym := make(map[string]interface{})
-		mySynonym["type"] = "synonym"
-		mySynonym["synonyms_path"] = gcfg.SynonymPath
-		es_filter := make(map[string]interface{})
-		es_filter["my_synonym"] = mySynonym
-		ik_syno := make(map[string]interface{})
-		//ik_syno["type"] = "custom"
-		ik_syno["tokenizer"] = "ik_max_word"
-		ik_syno["filter"] = []string{"my_synonym"}
-		esAnalyzer["ik_syno"] = ik_syno
-		esIndex["filter"] = es_filter
-		esIndex["analyzer"] = esAnalyzer
-		tmp := make(map[string]interface{})
-		tmp["analysis"] = esIndex
-		settting := make(map[string]interface{})
-		settting["index"] = tmp
-		if gcfg.Indice.Shards > 0 {
-			settting["number_of_shards"] = gcfg.Indice.Shards
+	err = iotools.NewFileLock(gcfg.FLock).Lock()
+	for nil != err {
+		log.Printf("Lock acuire failed:%v", err)
+		time.Sleep(10 * time.Second)
+		err = iotools.NewFileLock(gcfg.FLock).Lock()
+	}
+
+	var tmpFileNames []string
+	for _, fname := range fileNames {
+		cksm := fname + ".cksm"
+		done := fname + ".done"
+		if _, err := os.Stat(cksm); os.IsNotExist(err) {
+			log.Printf("No cksm file:%s for %s", cksm, fname)
+			continue
 		}
-
-		b, _ = json.Marshal(settting)
-
-		dest := gcfg.ES[0] + "/" + indice
-		log.Printf("####%v ", dest)
-		req, _ := http.NewRequest("PUT", dest, bytes.NewBuffer(b))
-		res, err := esClient.Do(req)
-		if nil != err {
-			log.Printf("###Failed to create index with errror:%v", err)
-			return
+		if _, err := os.Stat(done); os.IsNotExist(err) {
+			tmpFileNames = append(tmpFileNames, fname)
 		} else {
-			resb, _ := ioutil.ReadAll(res.Body)
-			log.Printf("###Update index for %v with %s  %s", indice, string(b), string(resb))
-			res.Body.Close()
-		}
-
-		indexSetting := make(map[string]interface{})
-		tmp = make(map[string]interface{})
-		tmp["number_of_replicas"] = 0
-		tmp["refresh_interval"] = "-1"
-		indexSetting["index"] = tmp
-		b, _ = json.Marshal(indexSetting)
-		dest = gcfg.ES[0] + "/" + indice + "/_settings"
-		req, _ = http.NewRequest("PUT", dest, bytes.NewBuffer(b))
-		res, err = esClient.Do(req)
-		if nil != err {
-			log.Printf("###Failed to update index setting with errror:%v", err)
-			return
-		} else {
-			resb, _ := ioutil.ReadAll(res.Body)
-			log.Printf("###Update index setting for %v with %s  %s", indice, string(b), string(resb))
-			res.Body.Close()
+			log.Printf("File:%s is already done before.", fname)
+			continue
 		}
 	}
-	for t, props := range gcfg.Type.Mapping {
-		propsMapping := make(map[string]interface{})
-		for _, prop := range props {
-			propMap := make(map[string]string)
-			propMap["type"] = "text"
-			propMap["analyzer"] = "ik_syno"
-			propMap["search_analyzer"] = "ik_syno"
-			propMap["include_in_all"] = "true"
-			propsMapping[prop] = propMap
-		}
-		c1 := make(map[string]interface{})
-		c1["type"] = "keyword"
-		propsMapping["c1"] = c1
-		c2 := make(map[string]interface{})
-		c2["type"] = "keyword"
-		propsMapping["c2"] = c2
-		cp := make(map[string]interface{})
-		cp["type"] = "keyword"
-		propsMapping["cp"] = cp
-		date := make(map[string]interface{})
-		date["type"] = "date"
-		date["format"] = "yyyy-MM-dd HH:mm:ss"
-		propsMapping["date"] = date
-		app := make(map[string]interface{})
-		app["properties"] = propsMapping
-		all := make(map[string]interface{})
-		all["enabled"] = false
-		app["_all"] = all
-
-		// esMapping := make(map[string]interface{})
-		// esMapping["mappings"] = app
-
-		indices := typeIndices[t]
-		for _, indice := range indices {
-			dest := gcfg.ES[0] + "/" + indice + "/" + t + "/_mapping"
-			b, _ := json.Marshal(app)
-			req, _ := http.NewRequest("POST", dest, bytes.NewBuffer(b))
-			res, err := esClient.Do(req)
-			if nil != err {
-				log.Printf("###Failed to update mapping with errror:%v", err)
-				return
-			} else {
-				resb, _ := ioutil.ReadAll(res.Body)
-				log.Printf("###Update mapping for %s/%v with %s  %s", indice, t, string(b), string(resb))
-				res.Body.Close()
-			}
-		}
-	}
-
-	var f *os.File
-	if f, err = os.Open(*file); err != nil {
-		log.Printf("###Error:%v", err)
+	fileNames = tmpFileNames
+	if len(fileNames) == 0 {
+		log.Printf("No available files for %v", fileNames)
 		return
 	}
-	defer f.Close()
-	reader := bufio.NewReader(f)
-	var buffer bytes.Buffer
-	var (
-		part   []byte
-		prefix bool
-	)
+	log.Printf("Start to load data from files:%v", fileNames)
+
+	tr := &http.Transport{
+		MaxIdleConnsPerHost: 2 * int(*concurrent),
+	}
+	esClient.Transport = tr
+	limitCount = *count
+
+	if gcfg.Rebuild {
+		gcfg.rebuildIndice = make([]string, 0)
+		gcfg.realIndice = make([]string, 0)
+		for _, server := range gcfg.ES {
+			addr := server + "/*/_alias/" + gcfg.Indice
+			res, err := esClient.Get(addr)
+			err = getHttpErr(res, err)
+			if nil != err {
+				log.Printf("Get alias failed for %s:%s", gcfg.Indice, server)
+				return
+			}
+			jsonDecoder := json.NewDecoder(res.Body)
+			resJSON := make(map[string]interface{})
+			err = jsonDecoder.Decode(&resJSON)
+			res.Body.Close()
+			if nil != err {
+				log.Printf("Get alias failed for %s:%s", gcfg.Indice, server)
+				return
+			}
+			realIndex := ""
+			for k, v := range resJSON {
+				vm := v.(map[string]interface{})
+				if alias, exist := vm["aliases"]; exist {
+					am := alias.(map[string]interface{})
+					if len(am) > 0 {
+						realIndex = k
+						break
+					}
+				}
+			}
+			if len(realIndex) == 0 {
+				log.Printf("No real index found for alias:%s", gcfg.Indice)
+				return
+			}
+			gcfg.realIndice = append(gcfg.realIndice, realIndex)
+			i, err := strconv.Atoi(realIndex[len(realIndex)-1:])
+			if nil != err {
+				log.Printf("Invalid indice type with no idx %s", realIndex)
+				return
+			}
+			//reindex next, it's a long running task
+			nextIndex := fmt.Sprintf("%s%d", realIndex[0:len(realIndex)-1], 1-i)
+			//delete next index, recreate it
+			delReq, _ := http.NewRequest("DELETE", server+"/"+nextIndex, nil)
+			res, err = esClient.Do(delReq)
+			err = getHttpErr(res, err)
+			if nil != err {
+				log.Printf("Delete old index failed for %s:%s", gcfg.Indice, server)
+				return
+			}
+			log.Printf("Server:%s DELETE next index:%s with response:%s", server, nextIndex, getHttpBody(res))
+
+			//recreate index
+			putReq, _ := http.NewRequest("PUT", server+"/"+nextIndex, nil)
+			res, err = esClient.Do(putReq)
+			err = getHttpErr(res, err)
+			if nil != err {
+				log.Printf("Recreate index failed for %s:%s", gcfg.Indice, server)
+				return
+			}
+			log.Printf("Server:%s RECREATE next index:%s with response:%s", server, nextIndex, getHttpBody(res))
+			gcfg.rebuildIndice = append(gcfg.rebuildIndice, nextIndex)
+		}
+
+	}
+
 	startTime = time.Now()
 	var wg sync.WaitGroup
 	taskChan := make(chan string, *concurrent)
 
 	for i := 0; i < *concurrent; i++ {
 		wg.Add(1)
-		go func() {
+		go func(idx int) {
 			for line := range taskChan {
 				if len(line) == 0 {
 					break
 				}
-				exit, err := postData(line)
+				err := postData(line)
 				if nil != err {
 					log.Printf("Failed to post data for reason:%v", err)
 				}
-				if exit {
+			}
+			wg.Done()
+			log.Printf("Task:%d exit.", idx)
+		}(i)
+	}
+	lineCount := int64(0)
+
+	for _, fname := range fileNames {
+		var f *os.File
+		if f, err = os.Open(fname); err != nil {
+			log.Printf("###Error:%v", err)
+			continue
+		}
+		defer f.Close()
+		reader := bufio.NewReader(f)
+		var buffer bytes.Buffer
+		var (
+			part   []byte
+			prefix bool
+		)
+		for {
+			if part, prefix, err = reader.ReadLine(); err != nil {
+				if err != io.EOF {
+					return
+				}
+				break
+			}
+			buffer.Write(part)
+			if !prefix {
+				line := buffer.String()
+				buffer.Reset()
+				if strings.HasPrefix(line, "#") {
+					continue
+				}
+				taskChan <- line
+				lineCount++
+				if limitCount > 0 && lineCount >= limitCount {
 					break
 				}
 			}
-			wg.Done()
-		}()
-	}
-	lineCount := int64(0)
-	for {
-		if part, prefix, err = reader.ReadLine(); err != nil {
-			if err != io.EOF {
-				return
-			}
+		}
+		log.Printf("#####Cost %v to load file:%s & put %d records into es.", time.Now().Sub(startTime), fname, processCount)
+		if limitCount > 0 && lineCount >= limitCount {
 			break
 		}
-		buffer.Write(part)
-		if !prefix {
-			line := buffer.String()
-			buffer.Reset()
-			if strings.HasPrefix(line, "#") {
-				continue
-			}
-			taskChan <- line
-			lineCount++
-			if limitCount > 0 && lineCount >= limitCount {
-				break
-			}
+		done := fname + ".done"
+		f.Close()
+		os.Create(done)
+		if len(*bak) > 0 {
+			os.Rename(done, *bak+"/"+done)
+			os.Rename(fname, *bak+"/"+fname)
+			cksm := fname + ".cksm"
+			os.Rename(cksm, *bak+"/"+cksm)
 		}
 	}
 	close(taskChan)
 	wg.Wait()
 	log.Printf("#####Cost %v to put %d records into es.", time.Now().Sub(startTime), processCount)
+	if invalidDateDocCount > 0 {
+		log.Printf("####Total %d doc with invalid 'date' field.", invalidDateDocCount)
+	}
 
-	if *replica > 0 {
-		for _, indice := range gcfg.Indice.Name {
-			indexSetting := make(map[string]interface{})
-			tmp := make(map[string]interface{})
-			tmp["number_of_replicas"] = *replica
-			tmp["refresh_interval"] = "1s"
-			indexSetting["index"] = tmp
-			b, _ := json.Marshal(indexSetting)
-			dest := gcfg.ES[0] + "/" + indice + "/_settings"
-			req, _ := http.NewRequest("PUT", dest, bytes.NewBuffer(b))
-			res, err := http.DefaultClient.Do(req)
+	if gcfg.Rebuild {
+		for i, server := range gcfg.ES {
+			//switch index alias
+			switchAlias := xjson.NewXJson()
+			switchAlias.Get("actions").Add()
+			switchAlias.Get("actions").Add()
+			switchAlias.Get("actions").At(0).Get("remove").Get("index").SetString(gcfg.realIndice[i])
+			switchAlias.Get("actions").At(0).Get("remove").Get("alias").SetString(gcfg.Indice)
+			switchAlias.Get("actions").At(1).Get("add").Get("index").SetString(gcfg.rebuildIndice[i])
+			switchAlias.Get("actions").At(1).Get("add").Get("alias").SetString(gcfg.Indice)
+			b, _ = json.Marshal(switchAlias.BuildJsonValue())
+			log.Printf("Server:%s switch index alias request:%s", server, string(b))
+			res, err := esClient.Post(server+"/_aliases", "application/json", bytes.NewBuffer(b))
+			err = getHttpErr(res, err)
 			if nil != err {
-				log.Printf("###Failed to enable index replica with errror:%v", err)
+				log.Printf("Switch index alias failed for %s:%s", gcfg.Indice, server)
 				return
-			} else {
-				resb, _ := ioutil.ReadAll(res.Body)
-				log.Printf("###Update index setting for %v with %s  %s", indice, string(b), string(resb))
-				res.Body.Close()
 			}
-			dest = gcfg.ES[0] + "/" + indice + "/_forcemerge?max_num_segments=5"
-			req, _ = http.NewRequest("POST", dest, nil)
-			res, err = http.DefaultClient.Do(req)
-			if nil != err {
-				log.Printf("###Failed to enable index replica with errror:%v", err)
-				return
-			} else {
-				resb, _ := ioutil.ReadAll(res.Body)
-				log.Printf("###Update index setting for %v with %s  %s", indice, string(b), string(resb))
-				res.Body.Close()
-			}
-
+			res.Body.Close()
 		}
+
+	}
+
+	if len(gcfg.Touch) > 0 {
+		os.Create(gcfg.Touch)
+		os.Chtimes(gcfg.Touch, time.Now(), time.Now())
 	}
 
 }
