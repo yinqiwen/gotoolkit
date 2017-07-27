@@ -11,7 +11,7 @@ type XJson struct {
 	value   interface{}
 	members map[string]*XJson
 	array   []*XJson
-	invalid bool
+	Invalid bool
 }
 
 var invalidXJson *XJson
@@ -24,6 +24,13 @@ func (x *XJson) Get(name string) *XJson {
 		x.members[name] = next
 	}
 	return next
+}
+
+func (x *XJson) ArraySize() int {
+	if x.Invalid {
+		return -1
+	}
+	return len(x.array)
 }
 
 func (x *XJson) RGet(name string) *XJson {
@@ -53,7 +60,7 @@ func (x *XJson) SetString(v string) {
 }
 
 func (x *XJson) GetInt() int64 {
-	if x.invalid {
+	if x.Invalid {
 		return -1
 	}
 
@@ -70,7 +77,7 @@ func (x *XJson) GetInt() int64 {
 }
 
 func (x *XJson) GetString() string {
-	if x.invalid {
+	if x.Invalid {
 		return ""
 	}
 	if _, ok := x.value.(string); ok {
@@ -101,7 +108,7 @@ func NewXJson() *XJson {
 	x := new(XJson)
 	x.members = make(map[string]*XJson)
 	x.array = make([]*XJson, 0)
-	x.invalid = false
+	x.Invalid = false
 	return x
 }
 
@@ -141,5 +148,5 @@ func Decode(reader io.Reader) (*XJson, error) {
 
 func init() {
 	invalidXJson = NewXJson()
-	invalidXJson.invalid = true
+	invalidXJson.Invalid = true
 }
