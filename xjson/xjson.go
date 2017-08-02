@@ -58,12 +58,14 @@ func (x *XJson) SetInt(v int64) {
 func (x *XJson) SetString(v string) {
 	x.value = v
 }
+func (x *XJson) Get() interface{} {
+	return x.value
+}
 
 func (x *XJson) GetInt() int64 {
 	if x.Invalid {
 		return -1
 	}
-
 	rv := reflect.ValueOf(x.value)
 	switch rv.Type().Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
