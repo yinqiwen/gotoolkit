@@ -58,7 +58,7 @@ func (x *XJson) SetInt(v int64) {
 func (x *XJson) SetString(v string) {
 	x.value = v
 }
-func (x *XJson) Get() interface{} {
+func (x *XJson) GetValue() interface{} {
 	return x.value
 }
 
