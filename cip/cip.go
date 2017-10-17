@@ -32,22 +32,6 @@ func inet_ntoa(ipnr int64) net.IP {
 	return net.IPv4(bytes[3], bytes[2], bytes[1], bytes[0])
 }
 
-func inet_aton(ipnr net.IP) int64 {
-	bits := strings.Split(ipnr.String(), ".")
-
-	b0, _ := strconv.Atoi(bits[0])
-	b1, _ := strconv.Atoi(bits[1])
-	b2, _ := strconv.Atoi(bits[2])
-	b3, _ := strconv.Atoi(bits[3])
-
-	var sum int64
-	sum += int64(b0) << 24
-	sum += int64(b1) << 16
-	sum += int64(b2) << 8
-	sum += int64(b3)
-	return sum
-}
-
 type ipRange struct {
 	Start, End uint32
 	Country    string
@@ -87,13 +71,10 @@ func (c *CountryIPSet) Load(rc io.ReadCloser, country string) error {
 				}
 				startIP := ip
 				ones, _ := ipnet.Mask.Size()
-				v := inet_aton(ip)
-				var tmp uint32
-				tmp = 0xFFFFFFFF
-				tmp = tmp >> uint32(ones)
-				v = v | int64(tmp)
-				endIP := inet_ntoa(v)
-				c.ranges = append(c.ranges, ipRange{ip2int(startIP), ip2int(endIP), country})
+				start := ip2int(startIP)
+				end := start + uint32(1<<(32-uint32(ones))) - 1
+				c.ranges = append(c.ranges, ipRange{start, end, country})
+				//log.Printf("####%d-%d %s", start, end, line)
 			} else {
 				sp := strings.Split(line, "|")
 				if len(sp) >= 6 {
@@ -106,6 +87,7 @@ func (c *CountryIPSet) Load(rc io.ReadCloser, country string) error {
 							v := ip2int(startIP)
 							ipcount, _ := strconv.ParseUint(sp[4], 10, 32)
 							c.ranges = append(c.ranges, ipRange{v, v + uint32(ipcount-1), sp[1]})
+							//log.Printf("####%d-%d %s", v, v+uint32(ipcount-1), line)
 						}
 					}
 				}
@@ -113,7 +95,6 @@ func (c *CountryIPSet) Load(rc io.ReadCloser, country string) error {
 		}
 	}
 	sort.Sort(c)
-	//fmt.Printf("###%v %v", c.ranges[0], c.ranges[1])
 	return nil
 }
 
@@ -187,7 +168,7 @@ func LoadIPSet(file string, country string) (*CountryIPSet, error) {
 	c := &CountryIPSet{}
 	f, err := os.Open(file)
 	if nil == err {
-		err = c.Load(f, "")
+		err = c.Load(f, country)
 	}
 	if nil != err {
 		return nil, err
