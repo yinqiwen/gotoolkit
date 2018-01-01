@@ -5,11 +5,23 @@ type PortfolioConfig struct {
 	Weight int
 }
 
+type MailConfig struct {
+	User   string
+	Passwd string
+	Notify []string
+}
+
 type SnotifyConfig struct {
-	User      string
-	Passwd    string
-	DataDir   string
-	Portfolio []PortfolioConfig
+	Log          []string
+	Mail         MailConfig
+	RedisAddr    string
+	UA           string
+	User         string
+	Passwd       string
+	DataDir      string
+	Portfolio    []PortfolioConfig
+	ScanPeriod   int
+	ScanInterval int
 }
 
 type RebalanceEntry struct {
