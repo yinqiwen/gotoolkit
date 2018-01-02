@@ -12,6 +12,7 @@ type MailConfig struct {
 }
 
 type SnotifyConfig struct {
+	Listen       string
 	Log          []string
 	Mail         MailConfig
 	RedisAddr    string

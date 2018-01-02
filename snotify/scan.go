@@ -54,11 +54,12 @@ func testParser(file string) {
 	})
 }
 
-func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSummary, error) {
+func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSummary, bool, error) {
+	changed := false
 	dest := fmt.Sprintf("https://xueqiu.com/P/%s", portfolio)
 	req, err := http.NewRequest("GET", dest, nil)
 	if nil != err {
-		return nil, err
+		return nil, changed, err
 	}
 	req.Header.Add("Accept", "*/*")
 	req.Header.Add("Accept-Encoding", "gzip, deflate, br")
@@ -73,7 +74,7 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 	res, err := http.DefaultClient.Do(req)
 	if nil != err {
 		logger.Error("Failed to request summary:%v", err)
-		return nil, err
+		return nil, changed, err
 	}
 	var reader io.Reader
 	reader, err = gzip.NewReader(res.Body)
@@ -83,7 +84,7 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 	doc, err := goquery.NewDocumentFromReader(reader)
 	if nil != err {
 		logger.Error("Invalid html with err:%v", err)
-		return nil, err
+		return nil, changed, err
 	}
 	validHTML := true
 	summary := &PortfolioSummary{}
@@ -119,17 +120,21 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 		}
 		if overide {
 			session.redisClient.Set(key, string(content), 0).Err()
+			changed = true
 		}
-		return summary, nil
+		return summary, changed, nil
 	}
 
-	return nil, nil
+	return nil, changed, nil
 }
 
 func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem, error) {
-	summary, err := getPortfolioSummary(session, portfolio)
+	summary, change, err := getPortfolioSummary(session, portfolio)
 	if nil != err {
 		return nil, err
+	}
+	if !change {
+		return nil, nil
 	}
 	var active []PortfolioActiveItem
 	dest := fmt.Sprintf("https://xueqiu.com/cubes/rebalancing/history.json?cube_symbol=%s&count=20&page=1", portfolio)
