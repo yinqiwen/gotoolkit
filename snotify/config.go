@@ -23,6 +23,7 @@ type SnotifyConfig struct {
 	Portfolio    []PortfolioConfig
 	ScanPeriod   int
 	ScanInterval int
+	cookieFile   string
 }
 
 type RebalanceEntry struct {

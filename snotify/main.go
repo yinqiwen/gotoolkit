@@ -26,6 +26,7 @@ func main() {
 	}
 	logger.InitLogger(gConf.Log)
 	os.Mkdir(gConf.DataDir, 0755)
+	gConf.cookieFile = gConf.DataDir + "/Cookies"
 
 	//smtpMail("", "", nil)
 

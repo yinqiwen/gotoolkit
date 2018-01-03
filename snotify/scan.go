@@ -68,7 +68,7 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 	req.Header.Add("Pragma", "no-cache")
 	req.Header.Add("User-Agent", gConf.UA)
 	req.Header.Add("X-Requested-With", "XMLHttpRequest")
-	for _, c := range session.loginCookies {
+	for _, c := range session.scookies {
 		req.AddCookie(c)
 	}
 	res, err := http.DefaultClient.Do(req)
@@ -151,7 +151,7 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	req.Header.Add("Referer", "https://xueqiu.com/P/"+portfolio)
 	req.Header.Add("User-Agent", gConf.UA)
 	req.Header.Add("X-Requested-With", "XMLHttpRequest")
-	for _, c := range session.loginCookies {
+	for _, c := range session.scookies {
 		req.AddCookie(c)
 	}
 	res, err := http.DefaultClient.Do(req)
@@ -166,7 +166,7 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	}
 	content, err := ioutil.ReadAll(reader)
 	if nil != err {
-		logger.Error("failed to read history:%v", err)
+		logger.Error("failed to read history:%v %v", err, res)
 		return active, err
 	}
 	str := string(content)
