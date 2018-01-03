@@ -131,6 +131,7 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem, error) {
 	summary, change, err := getPortfolioSummary(session, portfolio)
 	if nil != err {
+		logger.Error("failed to get summary:%v", err)
 		return nil, err
 	}
 	if !change {
@@ -155,6 +156,7 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	}
 	res, err := http.DefaultClient.Do(req)
 	if nil != err {
+		logger.Error("failed to get history:%v", err)
 		return active, err
 	}
 	var reader io.Reader
@@ -164,12 +166,14 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	}
 	content, err := ioutil.ReadAll(reader)
 	if nil != err {
+		logger.Error("failed to read history:%v", err)
 		return active, err
 	}
 	str := string(content)
 	rec := &RebalanceRecord{}
 	err = json.NewDecoder(strings.NewReader(str)).Decode(rec)
 	if nil != err {
+		logger.Error("failed to read history json:%s :%v", str, err)
 		return active, err
 	}
 	for _, item := range rec.Items {

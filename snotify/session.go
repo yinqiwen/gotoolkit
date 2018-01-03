@@ -145,6 +145,7 @@ func testSession(session *sessionData) error {
 	}
 	res, err := http.DefaultClient.Do(req)
 	if nil != err {
+		logger.Error("Failed to get user json:%v", err)
 		return err
 	}
 	var reader io.Reader
@@ -154,10 +155,12 @@ func testSession(session *sessionData) error {
 	}
 	content, err := ioutil.ReadAll(reader)
 	if nil != err {
+		logger.Error("Failed to read user json:%v", err)
 		return err
 	}
 	v, err := xjson.Decode(bytes.NewBuffer(content))
 	if nil != err {
+		logger.Error("Invalid json %s with :%v", string(content), err)
 		return err
 	}
 	if v.RGet("user_wallet").RGet("user_id").GetInt() != -1 {
