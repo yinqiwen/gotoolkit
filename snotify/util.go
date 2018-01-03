@@ -147,6 +147,9 @@ func lunarTime(s time.Time) (int, int) {
 }
 
 func isNonTradeDayTime(ts time.Time) bool {
+	if gConf.Debug {
+		return false
+	}
 	if ts.Hour() < 9 || ts.Hour() >= 16 {
 		return true
 	}

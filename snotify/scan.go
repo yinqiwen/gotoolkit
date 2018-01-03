@@ -128,7 +128,8 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 	return nil, changed, nil
 }
 
-func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem, error) {
+//only return latest one actitivity
+func getPortfolio(session *sessionData, portfolio string) (*PortfolioActiveItem, error) {
 	summary, change, err := getPortfolioSummary(session, portfolio)
 	if nil != err {
 		logger.Error("failed to get summary:%v", err)
@@ -137,11 +138,11 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	if !change {
 		return nil, nil
 	}
-	var active []PortfolioActiveItem
+	var latest *PortfolioActiveItem
 	dest := fmt.Sprintf("https://xueqiu.com/cubes/rebalancing/history.json?cube_symbol=%s&count=20&page=1", portfolio)
 	req, err := http.NewRequest("GET", dest, nil)
 	if nil != err {
-		return active, err
+		return nil, err
 	}
 	req.Header.Add("Accept", "*/*")
 	req.Header.Add("Accept-Encoding", "gzip, deflate, br")
@@ -157,7 +158,7 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	res, err := http.DefaultClient.Do(req)
 	if nil != err {
 		logger.Error("failed to get history:%v", err)
-		return active, err
+		return nil, err
 	}
 	var reader io.Reader
 	reader, err = gzip.NewReader(res.Body)
@@ -167,14 +168,14 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 	content, err := ioutil.ReadAll(reader)
 	if nil != err {
 		logger.Error("failed to read history:%v %v", err, res)
-		return active, err
+		return nil, err
 	}
 	str := string(content)
 	rec := &RebalanceRecord{}
 	err = json.NewDecoder(strings.NewReader(str)).Decode(rec)
 	if nil != err {
 		logger.Error("failed to read history json:%s :%v", str, err)
-		return active, err
+		return nil, err
 	}
 	for _, item := range rec.Items {
 		tm := time.Unix(item.CreatedAt/1000, 0)
@@ -192,13 +193,15 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 		} else {
 			continue
 		}
-		activeItem := PortfolioActiveItem{}
-		if nil != summary {
-			activeItem.Summary = *summary
+		if nil == latest {
+			activeItem := &PortfolioActiveItem{}
+			if nil != summary {
+				activeItem.Summary = *summary
+			}
+			activeItem.Item = item
+			latest = activeItem
 		}
-		activeItem.Item = item
 
-		active = append(active, activeItem)
 		hkey := fmt.Sprintf("%s:%d:entry", portfolio, item.Id)
 		for _, entry := range item.Entry {
 			exist, err := session.redisClient.HExists(hkey, entry.StockSymbol).Result()
@@ -220,17 +223,17 @@ func getPortfolio(session *sessionData, portfolio string) ([]PortfolioActiveItem
 			}
 		}
 	}
-	return active, nil
+	return latest, nil
 	// tmp, _ := json.MarshalIndent(rec, "", "\t")
 	// log.Printf("%s", string(tmp))
 
 }
 
-func scanPortfolio(session *sessionData, portfolio PortfolioConfig) ([]PortfolioActiveItem, error) {
-	active, err := getPortfolio(session, portfolio.Name)
+func scanPortfolio(session *sessionData, portfolio PortfolioConfig) (*PortfolioActiveItem, error) {
+	latest, err := getPortfolio(session, portfolio.Name)
 	if nil != err {
 		logger.Error("Failed to scan portfolio:%v with err:%v", portfolio.Name, err)
 		return nil, err
 	}
-	return active, nil
+	return latest, nil
 }

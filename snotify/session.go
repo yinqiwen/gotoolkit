@@ -105,7 +105,7 @@ func readCookie(session *sessionData) error {
 			line := buffer.String()
 			line = strings.TrimSpace(line)
 			buffer.Reset()
-			if strings.HasPrefix(line, "#") {
+			if strings.HasPrefix(line, "#") || len(line) == 0 {
 				continue
 			}
 			ss := strings.Split(line, "=")
@@ -169,18 +169,20 @@ func initSession() (*sessionData, error) {
 		DB:       0,  // use default DB
 	})
 
-	session.cookieFile = gConf.DataDir + "/Cookie"
+	session.cookieFile = gConf.cookieFile
 	err := readCookie(session)
 	if nil != err {
 		logger.Error("No cookie found.")
+		warnNoCookie()
 		return nil, err
 	}
 	err = testSession(session)
 	if nil != err {
 		logger.Error("Maybe session cookie is invalid.")
+		warnNoCookie()
 		return nil, err
 	}
-	logger.Info("Session cookie is valid.")
+	//logger.Info("Session cookie is valid.")
 	// if nil == err {
 	// 	err = testSession(session)
 	// 	if nil != err {

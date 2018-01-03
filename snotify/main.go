@@ -44,7 +44,7 @@ func main() {
 		if isNonTradeDayTime(now) {
 			continue
 		}
-		logger.Info("Start scan portfolios.")
+		//logger.Info("Start scan portfolios.")
 		session, err := initSession()
 		if nil != err {
 			log.Printf("Failed to init session with err:%v", err)
@@ -56,7 +56,9 @@ func main() {
 			if nil != err {
 				log.Printf("Failed to scan portfolio:%s", portfolio.Name)
 			} else {
-				active = append(active, tmp...)
+				if nil != tmp {
+					active = append(active, *tmp)
+				}
 			}
 			time.Sleep(time.Duration(gConf.ScanInterval) * time.Second)
 		}

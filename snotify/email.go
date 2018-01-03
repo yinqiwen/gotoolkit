@@ -5,20 +5,40 @@ import (
 	"crypto/tls"
 	"fmt"
 	"html/template"
-	"io/ioutil"
-	"os"
 	"time"
 
 	"github.com/yinqiwen/gotoolkit/logger"
 	gomail "gopkg.in/gomail.v2"
 )
 
+var lastWarnMailTime time.Time
+
+func warnNoCookie() {
+	if !lastWarnMailTime.IsZero() && time.Now().Sub(lastWarnMailTime) < 30*time.Minute {
+		return
+	}
+	d := gomail.NewDialer("smtp.gmail.com", 587, gConf.Mail.User, gConf.Mail.Passwd)
+	d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	m := gomail.NewMessage()
+	m.SetHeader("From", gConf.Mail.User)
+	m.SetHeader("To", gConf.Mail.Notify...)
+	//m.SetAddressHeader("Cc", "dan@example.com", "Dan")
+	m.SetHeader("Subject", "!Snotify无效Cookie!")
+	m.SetBody("text/plain", "NULL")
+	err := d.DialAndSend(m)
+	if err != nil {
+		logger.Error("Failed to send email:%v", err)
+		return
+	}
+	lastWarnMailTime = time.Now()
+}
+
 func mailNotifyInfo(items []PortfolioActiveItem) error {
 	content, err := genMail(items)
 	if nil != err {
 		return err
 	}
-	ioutil.WriteFile("x.html", []byte(content), os.ModePerm)
+	//ioutil.WriteFile("x.html", []byte(content), os.ModePerm)
 	d := gomail.NewDialer("smtp.gmail.com", 587, gConf.Mail.User, gConf.Mail.Passwd)
 	d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	m := gomail.NewMessage()

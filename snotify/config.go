@@ -23,6 +23,7 @@ type SnotifyConfig struct {
 	Portfolio    []PortfolioConfig
 	ScanPeriod   int
 	ScanInterval int
+	Debug        bool
 	cookieFile   string
 }
 
