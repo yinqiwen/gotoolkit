@@ -116,6 +116,8 @@ func getPortfolioSummary(session *sessionData, portfolio string) (*PortfolioSumm
 		if val, err := session.redisClient.Get(key).Result(); nil == err {
 			if string(content) == val {
 				overide = false
+			} else {
+				logger.Info("Prev:%s and Current %s", val, string(content))
 			}
 		}
 		if overide {

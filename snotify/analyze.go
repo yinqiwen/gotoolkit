@@ -1,18 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/yinqiwen/gotoolkit/logger"
 )
 
+type portfolioWeight struct {
+	Portfolio string
+	Name      string
+	Weight    string
+}
+
 type stockResultA struct {
 	Name      string
 	Code      string
-	Portfolio []string
+	Portfolio []portfolioWeight
+	count     int
 }
 
 type ByPortfolioCount []*stockResultA
@@ -44,7 +56,12 @@ func topNFromPortfolio() []*stockResultA {
 						r.Name = stock.Name
 						result[stock.Code] = r
 					}
-					r.Portfolio = append(r.Portfolio, portfolio.Name)
+					p := portfolioWeight{
+						Portfolio: summary.Code,
+						Name:      summary.Name,
+						Weight:    stock.Weight,
+					}
+					r.Portfolio = append(r.Portfolio, p)
 				}
 			}
 		}
@@ -71,28 +88,64 @@ func topNFromPortfolio() []*stockResultA {
 	return sortResult[0:cutIndex]
 }
 
-func topNFromStockActivity(last int) {
-	// redisClient := redis.NewClient(&redis.Options{
-	// 	Addr:     gConf.RedisAddr,
-	// 	Password: "", // no password set
-	// 	DB:       0,  // use default DB
-	// })
-	// now := time.Now()
-	// buy := make(map[string]*stockResultA)
-	// sell := make(map[string]*stockResultA)
-	// for i := 0; i < last; i++ {
-	// 	tm := now.Sub(time.Duration(i*24) * time.Hour)
-	// 	day := tm.Format("2006-01-02")
-	// 	key := fmt.Sprintf("stock:%s", day)
-	// 	vmap, err := redisClient.HGetAll(key).Result()
-	// 	if nil != err {
-	// 		logger.Error("Failed to get value for hgetall %s with err:%v", key, err)
-	// 		continue
-	// 	}
-	// 	if nil != vmap {
-	// 		for k, v := range vmap {
+func genPageForAnalyzeResult(s []*stockResultA) string {
+	if len(s) == 0 {
+		return ""
+	}
+	t := template.New("top.tpl.html")
+	t = t.Funcs(template.FuncMap{"getAction": getActionVal, "adjust": adjustVal, "getTime": getTime})
+	var err error
+	t, err = t.ParseFiles("./top.tpl.html")
+	if err != nil {
+		logger.Error("####1 %v", err)
+		return ""
+	}
+	buf := new(bytes.Buffer)
+	if err = t.Execute(buf, s); err != nil {
+		logger.Error("####2 %v", err)
+		return ""
+	}
+	return buf.String()
+}
 
-	// 		}
-	// 	}
-	// }
+func topNFromStockActivity(last int) {
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     gConf.RedisAddr,
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+	now := time.Now()
+	rmap := make([]map[string]*stockResultA, 2)
+	rmap[0] = make(map[string]*stockResultA)
+	rmap[1] = make(map[string]*stockResultA)
+	for i := 0; i < last; i++ {
+		tm := now.AddDate(0, 0, i*-1)
+		day := tm.Format("2006-01-02")
+		key := fmt.Sprintf("stock:%s", day)
+		vmap, err := redisClient.HGetAll(key).Result()
+		if nil != err {
+			logger.Error("Failed to get value for hgetall %s with err:%v", key, err)
+			continue
+		}
+		if nil != vmap {
+			for k, v := range vmap {
+				ss := strings.Split(k, ":")
+				stock := ss[0]
+				count, _ := strconv.Atoi(v)
+				var tmp map[string]*stockResultA
+				if ss[0] == "buy" {
+					tmp = rmap[0]
+				} else {
+					tmp = rmap[1]
+				}
+				r, exist := tmp[stock]
+				if !exist {
+					r = &stockResultA{}
+					tmp[stock] = r
+					r.Code = stock
+				}
+				r.count += count
+			}
+		}
+	}
 }
