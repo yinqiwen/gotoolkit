@@ -22,15 +22,6 @@ func ip2int(ip net.IP) uint32 {
 	}
 	return binary.BigEndian.Uint32(ip)
 }
-func inet_ntoa(ipnr int64) net.IP {
-	var bytes [4]byte
-	bytes[0] = byte(ipnr & 0xFF)
-	bytes[1] = byte((ipnr >> 8) & 0xFF)
-	bytes[2] = byte((ipnr >> 16) & 0xFF)
-	bytes[3] = byte((ipnr >> 24) & 0xFF)
-
-	return net.IPv4(bytes[3], bytes[2], bytes[1], bytes[0])
-}
 
 type ipRange struct {
 	Start, End uint32
@@ -49,6 +40,7 @@ func (c *CountryIPSet) Load(rc io.ReadCloser, country string) error {
 		part   []byte
 		prefix bool
 	)
+	countrySet := make(map[string]string)
 	defer rc.Close()
 	for {
 		if part, prefix, err = reader.ReadLine(); err != nil {
@@ -78,15 +70,27 @@ func (c *CountryIPSet) Load(rc io.ReadCloser, country string) error {
 			} else {
 				sp := strings.Split(line, "|")
 				if len(sp) >= 6 {
+					var ipCountry string
 					if len(country) > 0 && country != sp[1] {
 						continue
 					}
+					if len(country) > 0 {
+						ipCountry = country
+					} else {
+						if v, exist := countrySet[sp[1]]; !exist {
+							countrySet[sp[1]] = sp[1]
+							ipCountry = sp[1]
+						} else {
+							ipCountry = v
+						}
+					}
+
 					if sp[2] == "ipv4" {
 						startIP := net.ParseIP(sp[3])
 						if nil != startIP {
 							v := ip2int(startIP)
 							ipcount, _ := strconv.ParseUint(sp[4], 10, 32)
-							c.ranges = append(c.ranges, ipRange{v, v + uint32(ipcount-1), sp[1]})
+							c.ranges = append(c.ranges, ipRange{v, v + uint32(ipcount-1), ipCountry})
 							//log.Printf("####%d-%d %s", v, v+uint32(ipcount-1), line)
 						}
 					}
