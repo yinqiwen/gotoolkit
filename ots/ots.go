@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -145,6 +146,7 @@ func stat(args []string, c io.Writer) error {
 
 func gc(args []string, c io.Writer) error {
 	runtime.GC()
+	debug.FreeOSMemory()
 	return nil
 }
 
