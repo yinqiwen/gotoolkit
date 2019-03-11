@@ -39,15 +39,20 @@ type InitOptions struct {
 	Readonly  bool
 	Exclusive bool
 	MaxSize   uint64
+	ShmKey    uint64
 }
 
 func Open(opt *InitOptions) (*Segment, error) {
 	os.Create(opt.Path)
-	shmKey, err := ftok(opt.Path, opt.ProjId)
-	if nil != err {
-		return nil, err
+	var err error
+	shmKey := opt.ShmKey
+	if 0 == shmKey {
+		shmKey, err = ftok(opt.Path, opt.ProjId)
+		if nil != err {
+			return nil, err
+		}
 	}
-	existShmId, err := shmGet(shmKey, opt.MaxSize, 0666)
+	existShmId, err := shmGet(shmKey, 0, 0666)
 	if opt.Readonly {
 		if nil != err {
 			return nil, err
@@ -85,12 +90,15 @@ func Open(opt *InitOptions) (*Segment, error) {
 			shmCreate = true
 			rwShmId = shmId
 		} else {
-			existSize, err := shmGetSize(existShmId)
-			if nil != err {
-				return nil, err
-			}
-			if existSize != opt.MaxSize {
-				return nil, fmt.Errorf("expected exist shm size:%d while current size:%d", opt.MaxSize, existSize)
+			//need compare size
+			if opt.MaxSize > 0 {
+				existSize, err := shmGetSize(existShmId)
+				if nil != err {
+					return nil, err
+				}
+				if existSize != opt.MaxSize {
+					return nil, fmt.Errorf("expected exist shm size:%d while current size:%d", opt.MaxSize, existSize)
+				}
 			}
 		}
 	}
