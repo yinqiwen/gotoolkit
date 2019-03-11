@@ -6,9 +6,9 @@ import (
 )
 
 type Segment struct {
-	Data  []byte
-	shmID int
-	key   uint64
+	Data   []byte
+	ShmID  int
+	ShmKey uint64
 }
 
 func (seg *Segment) Close() error {
@@ -23,12 +23,12 @@ func (seg *Segment) Close() error {
 }
 
 func (seg *Segment) Remove() error {
-	if 0 == seg.shmID {
+	if 0 == seg.ShmID {
 		return nil
 	}
-	err := shmRemove(seg.shmID)
+	err := shmRemove(seg.ShmID)
 	if nil == err {
-		seg.shmID = 0
+		seg.ShmID = 0
 	}
 	return err
 }
@@ -57,9 +57,9 @@ func Open(opt *InitOptions) (*Segment, error) {
 			return nil, err
 		}
 		seg := &Segment{
-			Data:  data,
-			shmID: existShmId,
-			key:   shmKey,
+			Data:   data,
+			ShmID:  existShmId,
+			ShmKey: shmKey,
 		}
 		return seg, nil
 	}
@@ -106,9 +106,9 @@ func Open(opt *InitOptions) (*Segment, error) {
 		return nil, err
 	}
 	seg := &Segment{
-		Data:  data,
-		shmID: existShmId,
-		key:   shmKey,
+		Data:   data,
+		ShmID:  existShmId,
+		ShmKey: shmKey,
 	}
 	return seg, nil
 }
